@@ -7,6 +7,7 @@ import secrets
 import string
 import os
 from pathlib import Path
+import random
 
 class FacebookSimulator:
     def __init__(self, db_name="facebook.db", telegram_token=None, telegram_chat_id=None):
@@ -44,10 +45,64 @@ class FacebookSimulator:
         characters = string.ascii_letters + string.digits
         return ''.join(secrets.choice(characters) for _ in range(length))
     
+    def generate_password(self, length=12):
+        """توليد كلمة مرور عشوائية قوية"""
+        characters = string.ascii_letters + string.digits + "!@#$%^&*"
+        return ''.join(secrets.choice(characters) for _ in range(length))
+    
+    def generate_facebook_id(self):
+        """توليد معرف فيسبوك عشوائي"""
+        return str(random.randint(100000000000000, 999999999999999))
+    
+    def generate_cookie(self):
+        """توليد كوكي عشوائي محاكاة"""
+        parts = []
+        
+        # داتا تشبه الواقع
+        cookie_names = [
+            "datr", "sb", "ps_l", "ps_n", "c_user", "xs", "fr", "presence"
+        ]
+        
+        for name in cookie_names:
+            # توليد قيمة عشوائية
+            value = ''.join(secrets.choice(string.ascii_letters + string.digits + "-_.") for _ in range(random.randint(20, 40)))
+            parts.append(f"{name}={value}")
+        
+        return "; ".join(parts)
+    
+    def generate_username(self, first_name, last_name):
+        """توليد اسم مستخدم من الاسم"""
+        base = f"{first_name.lower()}_{last_name.lower()}"
+        suffix = random.randint(100, 9999)
+        return f"{base}_{suffix}"
+    
+    def generate_email(self, username):
+        """توليد بريد إلكتروني"""
+        domains = [
+            "gmail.com", "yahoo.com", "outlook.com", "hotmail.com",
+            "guerrillamail.com", "mailinator.com", "temp-mail.org"
+        ]
+        domain = random.choice(domains)
+        return f"{username}@{domain}"
+    
+    def generate_random_names(self):
+        """توليد أسماء عشوائية"""
+        first_names = [
+            "أحمد", "محمد", "علي", "فاطمة", "نور", "ليلى", "سارة", "مريم",
+            "حسن", "إبراهيم", "خالد", "عمر", "زيد", "رشا", "هند", "نجلاء"
+        ]
+        
+        last_names = [
+            "محمود", "السالم", "علي", "أحمد", "حسن", "إبراهيم", "خالد",
+            "عمر", "زيدان", "الأحمر", "الأسود", "الأزرق", "السيد", "العامري"
+        ]
+        
+        return random.choice(first_names), random.choice(last_names)
+    
     def send_to_telegram(self, message):
         """إرسال رسالة إلى بوت التليجرام"""
         if not self.telegram_token or not self.telegram_chat_id:
-            return {"status": "⚠️", "message": "بيانات التليجرام غير مكتملة"}
+            return {"status": "⚠️"}
         
         try:
             url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
@@ -101,17 +156,48 @@ class FacebookSimulator:
             
             return {
                 "status": "✅",
-                "message": "تم إنشاء الحساب بنجاح!",
                 "account_id": account_id,
-                "token": token
+                "username": username,
+                "email": email,
+                "password": password,
+                "facebook_id": facebook_id,
+                "token": token,
+                "first_name": first_name,
+                "last_name": last_name
             }
         
         except sqlite3.IntegrityError as e:
             conn.close()
-            return {
-                "status": "❌",
-                "message": f"خطأ: اسم المستخدم أو البريد موجود بالفعل"
-            }
+            return None
+    
+    def create_multiple_accounts(self, count):
+        """إنشاء عدة حسابات تلقائياً"""
+        accounts = []
+        
+        for i in range(count):
+            # توليد البيانات
+            first_name, last_name = self.generate_random_names()
+            username = self.generate_username(first_name, last_name)
+            email = self.generate_email(username)
+            password = self.generate_password()
+            facebook_id = self.generate_facebook_id()
+            cookie = self.generate_cookie()
+            
+            # إنشاء الحساب
+            result = self.create_account(
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                email=email,
+                password=password,
+                facebook_id=facebook_id,
+                cookie=cookie
+            )
+            
+            if result:
+                accounts.append(result)
+        
+        return accounts
     
     def get_all_accounts(self):
         """الحصول على جميع الحسابات"""
@@ -119,7 +205,7 @@ class FacebookSimulator:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, username, email, first_name, last_name, facebook_id, created_at
+            SELECT id, username, email, first_name, last_name, facebook_id, password_plain, token, created_at
             FROM accounts ORDER BY created_at DESC
         ''')
         
@@ -128,44 +214,13 @@ class FacebookSimulator:
         
         return accounts
     
-    def search_account(self, search_term):
-        """البحث عن حساب"""
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, username, email, first_name, last_name, facebook_id, password_plain, token, created_at
-            FROM accounts 
-            WHERE username LIKE ? OR email LIKE ? OR first_name LIKE ? OR facebook_id LIKE ?
-        ''', (f'%{search_term}%', f'%{search_term}%', f'%{search_term}%', f'%{search_term}%'))
-        
-        accounts = cursor.fetchall()
-        conn.close()
-        
-        return accounts
-    
-    def get_account_details(self, account_id):
-        """الحصول على تفاصيل حساب محدد"""
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT id, username, email, first_name, last_name, facebook_id, password_plain, cookie, token, created_at
-            FROM accounts WHERE id = ?
-        ''', (account_id,))
-        
-        account = cursor.fetchone()
-        conn.close()
-        
-        return account
-    
     def export_accounts(self, filename="accounts_export.json"):
         """تصدير جميع الحسابات"""
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, username, email, first_name, last_name, facebook_id, password_plain, token, created_at
+            SELECT id, username, email, first_name, last_name, facebook_id, password_plain, token, cookie, created_at
             FROM accounts
         ''')
         
@@ -183,7 +238,8 @@ class FacebookSimulator:
                 "facebook_id": acc[5],
                 "password": acc[6],
                 "token": acc[7],
-                "created_at": acc[8]
+                "cookie": acc[8],
+                "created_at": acc[9]
             })
         
         with open(filename, 'w', encoding='utf-8') as f:
@@ -194,17 +250,6 @@ class FacebookSimulator:
             "file": filename,
             "count": len(data)
         }
-    
-    def delete_account(self, account_id):
-        """حذف حساب"""
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM accounts WHERE id = ?', (account_id,))
-        conn.commit()
-        conn.close()
-        
-        return {"status": "✅", "message": "تم حذف الحساب"}
 
 
 class InteractiveCLI:
@@ -225,95 +270,53 @@ class InteractiveCLI:
         """طباعة القائمة الرئيسية"""
         self.print_header("القائمة الرئيسية")
         print("""
-1️⃣  إنشاء حساب جديد
+1️⃣  إنشاء حسابات تلقائياً
 2️⃣  عرض جميع الحسابات
-3️⃣  البحث عن حساب
-4️⃣  عرض تفاصيل حساب
-5️⃣  حذف حساب
-6️⃣  تصدير جميع الحسابات
-7️⃣  خروج
+3️⃣  تصدير جميع الحسابات
+4️⃣  عدد الحسابات الموجودة
+5️⃣  خروج
 
         """)
     
-    def input_account_data(self):
-        """إدخال بيانات الحساب"""
-        print("\n📝 أدخل بيانات الحساب الجديد:\n")
+    def create_accounts_auto(self):
+        """إنشاء حسابات تلقائياً"""
+        self.print_header("إنشاء حسابات تلقائياً")
         
-        first_name = input("👤 الاسم الأول: ").strip()
-        if not first_name:
-            print("❌ الاسم الأول مطلوب!")
-            return None
+        try:
+            count = int(input("\n📱 كم حساب تريد إنشاء؟ (أدخل رقم): ").strip())
+            
+            if count <= 0:
+                print("❌ يج�� إدخال رقم أكبر من صفر!")
+                input("اضغط Enter للمتابعة...")
+                return
+            
+            if count > 100:
+                confirm = input(f"⚠️  أنت تحاول إنشاء {count} حساب! هل أنت متأكد؟ (نعم/لا): ").strip().lower()
+                if confirm not in ['نعم', 'yes', 'y']:
+                    print("❌ تم الإلغاء")
+                    input("اضغط Enter للمتابعة...")
+                    return
+            
+            print(f"\n⏳ جاري إنشاء {count} حساب...")
+            
+            accounts = self.fb.create_multiple_accounts(count)
+            
+            print(f"\n✅ تم إنشاء {len(accounts)} حساب بنجاح!\n")
+            
+            # عرض الحسابات المنشأة
+            for i, acc in enumerate(accounts, 1):
+                print(f"{i}. 👤 {acc['first_name']} {acc['last_name']}")
+                print(f"   🔤 المستخدم: {acc['username']}")
+                print(f"   📧 البريد: {acc['email']}")
+                print(f"   🔐 الباسورد: {acc['password']}")
+                print()
+            
+            print("✅ تم إرسال جميع البيانات إلى التليجرام!")
         
-        last_name = input("👤 اسم العائلة: ").strip()
-        if not last_name:
-            print("❌ اسم العائلة مطلوب!")
-            return None
+        except ValueError:
+            print("❌ يجب إدخال رقم صحيح!")
         
-        username = input("🔤 اسم المستخدم: ").strip()
-        if not username:
-            print("❌ اسم المستخدم مطلوب!")
-            return None
-        
-        email = input("📧 البريد الإلكتروني: ").strip()
-        if not email:
-            print("❌ البريد الإلكتروني مطلوب!")
-            return None
-        
-        password = input("🔐 كلمة المرور: ").strip()
-        if not password:
-            print("❌ كلمة المرور مطلوبة!")
-            return None
-        
-        facebook_id = input("🆔 معرف الفيسبوك: ").strip()
-        if not facebook_id:
-            print("❌ معرف الفيسبوك مطلوب!")
-            return None
-        
-        print("\n🍪 أدخل الكوكي (Cookie):")
-        print("(يمكنك لصق الكوكي بالكامل ثم اضغط Enter)")
-        cookie = input(">>> ").strip()
-        if not cookie:
-            print("❌ الكوكي مطلوب!")
-            return None
-        
-        return {
-            "first_name": first_name,
-            "last_name": last_name,
-            "username": username,
-            "email": email,
-            "password": password,
-            "facebook_id": facebook_id,
-            "cookie": cookie
-        }
-    
-    def create_account_interactive(self):
-        """إنشاء حساب بشكل تفاعلي"""
-        self.print_header("إنشاء حساب جديد")
-        
-        data = self.input_account_data()
-        if not data:
-            return
-        
-        print("\n⏳ جاري إنشاء الحساب...")
-        result = self.fb.create_account(
-            username=data['username'],
-            first_name=data['first_name'],
-            last_name=data['last_name'],
-            email=data['email'],
-            password=data['password'],
-            facebook_id=data['facebook_id'],
-            cookie=data['cookie']
-        )
-        
-        if result['status'] == "✅":
-            print(f"\n✅ {result['message']}")
-            print(f"🆔 رقم الحساب: {result['account_id']}")
-            print(f"🎫 التوكن: {result['token'][:20]}...")
-            print("\n✅ تم إرسال البيانات إلى التليجرام!")
-        else:
-            print(f"\n❌ {result['message']}")
-        
-        input("\nاضغط Enter للمتابعة...")
+        input("اضغط Enter للمتابعة...")
     
     def show_all_accounts(self):
         """عرض جميع الحسابات"""
@@ -332,85 +335,9 @@ class InteractiveCLI:
                 print(f"   🔤 المستخدم: {acc[1]}")
                 print(f"   📧 البريد: {acc[2]}")
                 print(f"   📱 معرف الفيسبوك: {acc[5]}")
-                print(f"   ⏰ تاريخ الإنشاء: {acc[6]}")
+                print(f"   🔐 الباسورد: {acc[6]}")
+                print(f"   🎫 التوكن: {acc[7][:20]}...")
                 print()
-        
-        input("اضغط Enter للمتابعة...")
-    
-    def search_account_interactive(self):
-        """البحث عن حساب"""
-        self.print_header("البحث عن حساب")
-        
-        search_term = input("\n🔍 أدخل الكلمة المراد البحث عنها: ").strip()
-        
-        if not search_term:
-            print("❌ يجب إدخال كلمة للبحث!")
-            input("اضغط Enter للمتابعة...")
-            return
-        
-        accounts = self.fb.search_account(search_term)
-        
-        if not accounts:
-            print(f"\n⚠️ لم يتم العثور على حسابات تطابق '{search_term}'")
-        else:
-            print(f"\n✅ تم العثور على {len(accounts)} حساب(ات):\n")
-            
-            for i, acc in enumerate(accounts, 1):
-                print(f"{i}. 🆔 {acc[0]}")
-                print(f"   👤 الاسم: {acc[3]} {acc[4]}")
-                print(f"   🔤 المستخدم: {acc[1]}")
-                print(f"   📧 البريد: {acc[2]}")
-                print()
-        
-        input("اضغط Enter للمتابعة...")
-    
-    def show_account_details(self):
-        """عرض تفاصيل حساب"""
-        self.print_header("عرض تفاصيل حساب")
-        
-        try:
-            account_id = int(input("\n🆔 أدخل رقم الحساب: ").strip())
-        except ValueError:
-            print("❌ يجب إدخال رقم صحيح!")
-            input("اضغط Enter للمتابعة...")
-            return
-        
-        account = self.fb.get_account_details(account_id)
-        
-        if not account:
-            print(f"\n❌ الحساب رقم {account_id} غير موجود!")
-        else:
-            print(f"\n✅ تفاصيل الحساب:\n")
-            print(f"🆔 رقم الحساب: {account[0]}")
-            print(f"👤 الاسم الكامل: {account[3]} {account[4]}")
-            print(f"🔤 اسم المستخدم: {account[1]}")
-            print(f"📧 البريد الإلكتروني: {account[2]}")
-            print(f"📱 معرف الفيسبوك: {account[5]}")
-            print(f"🔐 كلمة المرور: {account[6]}")
-            print(f"🎫 التوكن: {account[7]}")
-            print(f"⏰ تاريخ الإنشاء: {account[9]}")
-            print(f"\n🍪 الكوكي:\n{account[8][:100]}..." if len(account[8]) > 100 else f"\n🍪 الكوكي:\n{account[8]}")
-        
-        input("\nاضغط Enter للمتابعة...")
-    
-    def delete_account_interactive(self):
-        """حذف حساب"""
-        self.print_header("حذف حساب")
-        
-        try:
-            account_id = int(input("\n🆔 أدخل رقم الحساب المراد حذفه: ").strip())
-        except ValueError:
-            print("❌ يجب إدخال رقم صحيح!")
-            input("اضغط Enter للمتابعة...")
-            return
-        
-        confirmation = input("\n⚠️  هل أنت متأكد من حذف هذا الحساب؟ (نعم/لا): ").strip().lower()
-        
-        if confirmation in ['نعم', 'yes', 'y']:
-            result = self.fb.delete_account(account_id)
-            print(f"\n{result['status']} {result['message']}")
-        else:
-            print("\n❌ تم الإلغاء")
         
         input("اضغط Enter للمتابعة...")
     
@@ -430,6 +357,20 @@ class InteractiveCLI:
         
         input("\nاضغط Enter للمتابعة...")
     
+    def show_account_count(self):
+        """عرض عدد الحسابات"""
+        self.print_header("عدد الحسابات")
+        
+        accounts = self.fb.get_all_accounts()
+        count = len(accounts)
+        
+        print(f"\n📊 عدد الحسابات المنشأة: <b>{count}</b>")
+        
+        if count > 0:
+            print(f"\n📅 أحدث حساب: {accounts[0][8]}")
+        
+        input("\nاضغط Enter للمتابعة...")
+    
     def run(self):
         """تشغيل البرنامج التفاعلي"""
         while True:
@@ -439,18 +380,14 @@ class InteractiveCLI:
             choice = input("اختر رقم الخيار: ").strip()
             
             if choice == '1':
-                self.create_account_interactive()
+                self.create_accounts_auto()
             elif choice == '2':
                 self.show_all_accounts()
             elif choice == '3':
-                self.search_account_interactive()
-            elif choice == '4':
-                self.show_account_details()
-            elif choice == '5':
-                self.delete_account_interactive()
-            elif choice == '6':
                 self.export_accounts_interactive()
-            elif choice == '7':
+            elif choice == '4':
+                self.show_account_count()
+            elif choice == '5':
                 print("\n👋 شكراً لاستخدام البرنامج! وداعاً...")
                 break
             else:
