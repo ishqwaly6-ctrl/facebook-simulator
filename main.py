@@ -18,6 +18,14 @@ class FacebookSimulator:
     
     def init_database(self):
         """إنشاء قاعدة البيانات والجداول"""
+        # حذف قاعدة البيانات القديمة إذا كانت موجودة
+        if os.path.exists(self.db_name):
+            try:
+                os.remove(self.db_name)
+                print(f"✅ تم حذف قاعدة البيانات القديمة")
+            except Exception as e:
+                print(f"⚠️ خطأ في حذف قاعدة البيانات القديمة: {e}")
+        
         conn = sqlite3.connect(self.db_name)
         cursor = conn.cursor()
         
@@ -27,11 +35,11 @@ class FacebookSimulator:
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password_plain TEXT NOT NULL,
-                facebook_id TEXT,
-                cookie TEXT,
-                token TEXT UNIQUE,
-                first_name TEXT,
-                last_name TEXT,
+                facebook_id TEXT NOT NULL,
+                cookie TEXT NOT NULL,
+                token TEXT UNIQUE NOT NULL,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 is_active INTEGER DEFAULT 1
             )
@@ -39,6 +47,7 @@ class FacebookSimulator:
         
         conn.commit()
         conn.close()
+        print(f"✅ تم إنشاء قاعدة البيانات بنجاح")
     
     def generate_token(self, length=32):
         """توليد توكن عشوائي"""
@@ -89,12 +98,14 @@ class FacebookSimulator:
         """توليد أسماء عشوائية"""
         first_names = [
             "أحمد", "محمد", "علي", "فاطمة", "نور", "ليلى", "سارة", "مريم",
-            "حسن", "إبراهيم", "خالد", "عمر", "زيد", "رشا", "هند", "نجلاء"
+            "حسن", "إبراهيم", "خالد", "عمر", "زيد", "رشا", "هند", "نجلاء",
+            "يوسف", "هاني", "مصطفى", "جمال", "ياسمين", "إسراء", "أريج", "نسرين"
         ]
         
         last_names = [
             "محمود", "السالم", "علي", "أحمد", "حسن", "إبراهيم", "خالد",
-            "عمر", "زيدان", "الأحمر", "الأسود", "الأزرق", "السيد", "العامري"
+            "عمر", "زيدان", "الأحمر", "الأسود", "الأزرق", "السيد", "العامري",
+            "الهاشمي", "القاسمي", "التميمي", "الشمري", "الدعيجي", "الشراري"
         ]
         
         return random.choice(first_names), random.choice(last_names)
@@ -286,7 +297,7 @@ class InteractiveCLI:
             count = int(input("\n📱 كم حساب تريد إنشاء؟ (أدخل رقم): ").strip())
             
             if count <= 0:
-                print("❌ يج�� إدخال رقم أكبر من صفر!")
+                print("❌ يجب إدخال رقم أكبر من صفر!")
                 input("اضغط Enter للمتابعة...")
                 return
             
@@ -297,7 +308,7 @@ class InteractiveCLI:
                     input("اضغط Enter للمتابعة...")
                     return
             
-            print(f"\n⏳ جاري إنشاء {count} حساب...")
+            print(f"\n⏳ جاري إنشاء {count} حساب...\n")
             
             accounts = self.fb.create_multiple_accounts(count)
             
@@ -309,6 +320,7 @@ class InteractiveCLI:
                 print(f"   🔤 المستخدم: {acc['username']}")
                 print(f"   📧 البريد: {acc['email']}")
                 print(f"   🔐 الباسورد: {acc['password']}")
+                print(f"   🆔 معرف الفيسبوك: {acc['facebook_id']}")
                 print()
             
             print("✅ تم إرسال جميع البيانات إلى التليجرام!")
@@ -319,7 +331,7 @@ class InteractiveCLI:
         input("اضغط Enter للمتابعة...")
     
     def show_all_accounts(self):
-        """عرض جميع الحسابات"""
+        """عرض جميع ال��سابات"""
         self.print_header("جميع الحسابات")
         
         accounts = self.fb.get_all_accounts()
@@ -364,7 +376,7 @@ class InteractiveCLI:
         accounts = self.fb.get_all_accounts()
         count = len(accounts)
         
-        print(f"\n📊 عدد الحسابات المنشأة: <b>{count}</b>")
+        print(f"\n📊 عدد الحسابات المنشأة: {count}")
         
         if count > 0:
             print(f"\n📅 أحدث حساب: {accounts[0][8]}")
@@ -399,6 +411,8 @@ if __name__ == "__main__":
     # بيانات التليجرام
     TELEGRAM_TOKEN = "8321731547:AAEOGHm4fLgb7vkTzF6EBJ2Yy-SLYsKceas"
     TELEGRAM_CHAT_ID = "5749281880"
+    
+    print("\n🔵 تم تحديث قاعدة البيانات...")
     
     # بدء البرنامج
     cli = InteractiveCLI(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
