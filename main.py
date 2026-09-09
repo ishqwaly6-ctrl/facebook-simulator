@@ -11,6 +11,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import imaplib
 import email
@@ -26,7 +27,6 @@ class FacebookSimulator:
     
     def init_database(self):
         """إنشاء قاعدة البيانات والجداول"""
-        # حذف قاعدة البيانات القديمة إذا كانت موجودة
         if os.path.exists(self.db_name):
             try:
                 os.remove(self.db_name)
@@ -139,55 +139,9 @@ class FacebookSimulator:
             print(f"❌ خطأ في إرسال رسالة التليجرام: {e}")
             return {"status": "❌"}
     
-    def verify_email_gmail(self, email_addr, app_password, verification_code_pattern=None):
-        """التحقق من رسالة تأكيد الايميل من Gmail"""
-        try:
-            print(f"⏳ جاري البحث عن رسالة التأكيد في البريد...")
-            
-            # الاتصال بـ Gmail IMAP
-            imap = imaplib.IMAP4_SSL("imap.gmail.com")
-            imap.login(email_addr, app_password)
-            imap.select("INBOX")
-            
-            # البحث عن رسائل من Facebook
-            status, messages = imap.search(None, 'FROM', 'facebook')
-            
-            if messages[0]:
-                email_ids = messages[0].split()
-                latest_email_id = email_ids[-1]
-                
-                status, msg_data = imap.fetch(latest_email_id, "(RFC822)")
-                msg = email.message_from_bytes(msg_data[0][1])
-                
-                # استخراج الرابط أو الكود من الرسالة
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        if part.get_content_type() == "text/plain":
-                            body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                            # البحث عن رابط التأكيد
-                            link_pattern = r'https://[^\s]+'
-                            links = re.findall(link_pattern, body)
-                            if links:
-                                print(f"✅ تم العثور على رابط التأكيد")
-                                imap.close()
-                                return links[0]
-                else:
-                    body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-                    link_pattern = r'https://[^\s]+'
-                    links = re.findall(link_pattern, body)
-                    if links:
-                        print(f"✅ تم العثور على رابط التأكيد")
-                        imap.close()
-                        return links[0]
-            
-            imap.close()
-            return None
-        except Exception as e:
-            print(f"❌ خطأ في البحث عن رسالة التأكيد: {e}")
-            return None
-    
     def create_facebook_account_with_selenium(self, first_name, last_name, email, password, headless=False):
         """إنشاء حساب فيسبوك باستخدام Selenium"""
+        driver = None
         try:
             print(f"🌐 جاري فتح متصفح Chrome...")
             
@@ -198,13 +152,18 @@ class FacebookSimulator:
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             
-            driver = webdriver.Chrome(options=options)
+            # استخدام webdriver-manager لتحميل ChromeDriver تلقائياً
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=options
+            )
             
             # فتح صفحة فيسبوك
             print(f"📱 جاري الانتقال إلى فيسبوك...")
             driver.get("https://www.facebook.com")
-            time.sleep(2)
+            time.sleep(3)
             
             # النقر على زر "إنشاء حساب جديد"
             try:
@@ -212,98 +171,104 @@ class FacebookSimulator:
                     EC.element_to_be_clickable((By.LINK_TEXT, "إنشاء حساب جديد"))
                 )
                 create_button.click()
+                print("✅ تم النقر على زر الإنشاء")
             except:
-                create_button = driver.find_element(By.XPATH, "//a[contains(text(), 'إنشاء')]")
-                create_button.click()
+                try:
+                    create_button = driver.find_element(By.XPATH, "//a[contains(text(), 'إنشاء')]")
+                    create_button.click()
+                    print("✅ تم النقر على زر الإنشاء")
+                except:
+                    print("⚠️ لم يتم العثور على زر الإنشاء")
             
-            time.sleep(2)
+            time.sleep(3)
             
             # ملء نموذج التسجيل
             print(f"📝 جاري ملء نموذج التسجيل...")
             
-            # الاسم الأول
-            first_name_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.NAME, "firstname"))
-            )
-            first_name_input.send_keys(first_name)
-            
-            # الاسم الأخير
-            last_name_input = driver.find_element(By.NAME, "lastname")
-            last_name_input.send_keys(last_name)
-            
-            # البريد الإلكتروني
-            email_input = driver.find_element(By.NAME, "reg_email__")
-            email_input.send_keys(email)
-            
-            # تأكيد البريد
-            email_confirm = driver.find_element(By.NAME, "reg_email_confirmation__")
-            email_confirm.send_keys(email)
-            
-            # كلمة المرور
-            password_input = driver.find_element(By.NAME, "reg_passwd__")
-            password_input.send_keys(password)
-            
-            # تاريخ الميلاد
-            day_select = driver.find_element(By.NAME, "birthday_day")
-            day_select.send_keys("15")
-            
-            month_select = driver.find_element(By.NAME, "birthday_month")
-            month_select.send_keys("Jan")
-            
-            year_select = driver.find_element(By.NAME, "birthday_year")
-            year_select.send_keys("1990")
-            
-            # الجنس
-            gender_male = driver.find_element(By.CSS_SELECTOR, "input[value='1']")
-            gender_male.click()
-            
-            time.sleep(1)
-            
-            # النقر على زر التسجيل
-            print(f"✉️ جاري إنشاء الحساب...")
-            signup_button = driver.find_element(By.NAME, "websubmit")
-            signup_button.click()
-            
-            time.sleep(3)
-            
-            # انتظار التحويل إلى صفحة التأكيد
             try:
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'تأكيد')]"))
+                # الاسم الأول
+                first_name_input = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.NAME, "firstname"))
                 )
+                first_name_input.send_keys(first_name)
+                print(f"✅ تم إدخال الاسم الأول: {first_name}")
+                time.sleep(0.5)
+                
+                # الاسم الأخير
+                last_name_input = driver.find_element(By.NAME, "lastname")
+                last_name_input.send_keys(last_name)
+                print(f"✅ تم إدخال الاسم الأخير: {last_name}")
+                time.sleep(0.5)
+                
+                # البريد الإلكتروني
+                email_input = driver.find_element(By.NAME, "reg_email__")
+                email_input.send_keys(email)
+                print(f"✅ تم إدخال البريد: {email}")
+                time.sleep(0.5)
+                
+                # تأكيد البريد
+                email_confirm = driver.find_element(By.NAME, "reg_email_confirmation__")
+                email_confirm.send_keys(email)
+                print(f"✅ تم تأكيد البريد")
+                time.sleep(0.5)
+                
+                # كلمة المرور
+                password_input = driver.find_element(By.NAME, "reg_passwd__")
+                password_input.send_keys(password)
+                print(f"✅ تم إدخال كلمة المرور")
+                time.sleep(0.5)
+                
+                # تاريخ الميلاد
+                day_select = driver.find_element(By.NAME, "birthday_day")
+                day_select.send_keys("15")
+                
+                month_select = driver.find_element(By.NAME, "birthday_month")
+                month_select.send_keys("Jan")
+                
+                year_select = driver.find_element(By.NAME, "birthday_year")
+                year_select.send_keys("1990")
+                print(f"✅ تم إدخال تاريخ الميلاد")
+                
+                # الجنس
+                gender_male = driver.find_element(By.CSS_SELECTOR, "input[value='1']")
+                gender_male.click()
+                print(f"✅ تم اختيار الجنس")
+                
+                time.sleep(1)
+                
+                # النقر على زر التسجيل
+                print(f"✉️ جاري إنشاء الحساب...")
+                signup_button = driver.find_element(By.NAME, "websubmit")
+                signup_button.click()
+                
+                time.sleep(5)
+                
                 print(f"✅ تم إنشاء الحساب بنجاح!")
                 
-                # محاولة إيجاد رابط التأكيد من الايميل
-                app_password = "your_app_password"  # استبدل بـ App Password
-                verification_link = self.verify_email_gmail(email, app_password)
-                
-                if verification_link:
-                    print(f"🔗 جاري فتح رابط التأكيد...")
-                    driver.get(verification_link)
-                    time.sleep(3)
-                    print(f"✅ تم تأكيد الايميل!")
-                
             except Exception as e:
-                print(f"⚠️ قد تحتاج لتأكيد الايميل يدويّاً: {e}")
+                print(f"⚠️ خطأ في ملء النموذج: {e}")
+                print(f"🔗 الرابط الحالي: {driver.current_url}")
             
             # الحصول على معلومات الحساب
             current_url = driver.current_url
             facebook_id = current_url.split('/')[-1] if '/' in current_url else "unknown"
             
-            driver.quit()
+            if driver:
+                driver.quit()
             
             return {
                 "status": "✅",
                 "facebook_id": facebook_id,
-                "message": "تم إنشاء الحساب وتسجيل الدخول بنجاح"
+                "message": "تم إنشاء الحساب بنجاح"
             }
         
         except Exception as e:
             print(f"❌ خطأ في إنشاء حساب الفيسبوك: {e}")
-            try:
-                driver.quit()
-            except:
-                pass
+            if driver:
+                try:
+                    driver.quit()
+                except:
+                    pass
             return {
                 "status": "❌",
                 "error": str(e)
@@ -329,7 +294,7 @@ class FacebookSimulator:
             
             # إرسال إلى التليجرام
             telegram_message = f"""
-✅ <b>حساب فيسبوك جديد تم إنشاؤه وتفعيله!</b>
+✅ <b>حساب فيسبوك جديد تم إنشاؤه!</b>
 
 👤 <b>الاسم:</b> {first_name} {last_name}
 🔤 <b>اسم المستخدم:</b> <code>{username}</code>
@@ -338,7 +303,6 @@ class FacebookSimulator:
 🆔 <b>معرف الفيسبوك:</b> <code>{facebook_id}</code>
 🎫 <b>التوكن:</b> <code>{token}</code>
 ⏰ <b>الوقت:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-✅ <b>الحالة:</b> نشط وجاهز للاستخدام
             """
             
             self.send_to_telegram(telegram_message)
@@ -490,10 +454,13 @@ class InteractiveCLI:
             result = self.fb.create_and_activate_account(headless=headless)
             
             if result:
-                print(f"\n✅ تم إنشاء الحساب بنجاح!")
+                print(f"\n{'='*70}")
+                print(f"✅ تم إنشاء الحساب بنجاح!")
                 print(f"📧 البريد: {result['email']}")
                 print(f"🔐 الباسورد: {result['password']}")
+                print(f"👤 الاسم: {result['first_name']} {result['last_name']}")
                 print(f"✅ تم إرسال البيانات إلى التليجرام!")
+                print(f"{'='*70}")
             else:
                 print(f"\n❌ حدث خطأ في إنشاء الحساب")
         
@@ -585,6 +552,7 @@ if __name__ == "__main__":
     TELEGRAM_CHAT_ID = "5749281880"
     
     print("\n🔵 تم تحديث الأداة لإنشاء حسابات فيسبوك وتفعيلها...")
+    print("📥 جاري تثبيت ChromeDriver...\n")
     
     # بدء البرنامج
     cli = InteractiveCLI(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
